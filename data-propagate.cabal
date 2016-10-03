@@ -6,11 +6,10 @@ homepage:            https://github.com/ptek/data-propagate#readme
 license:             BSD3
 license-file:        LICENSE
 author:              Pavlo Kerestey
-maintainer:          pavlo@kerestey.net
+maintainer:          pavlo <at> kerestey [dot] net
 copyright:           2016 Pavlo Kerestey
 build-type:          Simple
 cabal-version:       >=1.10
--- extra-source-files:
 
 library
   hs-source-dirs:      src
@@ -22,7 +21,7 @@ library
                      , containers
                      , time
 
-test-suite primitive-propagator-test
+test-suite data-propagate-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs
@@ -35,4 +34,4 @@ test-suite primitive-propagator-test
 
 source-repository head
   type:     git
-  location: https://github.com/ptek/primitive-propagator
+  location: https://github.com/ptek/data-propagate
