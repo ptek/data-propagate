@@ -1,11 +1,3 @@
--- | Data.Propagate
---
--- The module provides basic functionality for the propagators. It
--- tries to implement the work on Propagation Networks. We say that it
--- tries to implement it because the implementation may not be
--- complete. Never the less, we are open to discussion or new insights
--- regarding the work
---
 module Data.Propagate (
   -- * Data Declarations
   PtEvent
@@ -41,7 +33,6 @@ data PtEvent a = PtEvent POSIXTime a deriving (Eq,Show)
 
 
 instance Functor PtQueue where
-  -- ^ Useful for changing of messages in the queue. Provides fmap
   fmap f (PtQueue s) = PtQueue (fmap (fmap f) s)
 
 instance Monoid (PtQueue a) where
@@ -49,7 +40,6 @@ instance Monoid (PtQueue a) where
   mappend = union
 
 instance Functor PtEvent where
-  -- ^ Useful for changing of messages in the queue. Provides fmap
   fmap f (PtEvent t a) = PtEvent t (f a)
 
 

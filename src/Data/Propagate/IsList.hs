@@ -7,7 +7,7 @@ import           Data.Propagate (PtEvent, PtQueue)
 import qualified Data.Propagate as P
 import           GHC.Exts
 
--- | Useful with OverloadedLists Extension
+-- | Useful for OverloadedLists Extension
 --
 instance IsList (PtQueue a) where
   type Item (PtQueue a) = PtEvent a
