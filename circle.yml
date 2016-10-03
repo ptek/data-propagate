@@ -1,3 +1,8 @@
+machine:
+  ghc:
+    version: 8.0.1
+  services: {}
+
 dependencies:
   cache_directories:
     - "~/.stack"
