@@ -1,5 +1,3 @@
--- {-# LANGUAGE FlexibleInstances #-}
-
 -- | Data.Propagate
 --
 -- The module provides basic functionality for the propagators. It
@@ -20,21 +18,23 @@ module Data.Propagate (
  ,leftMerge
  ,propagate
  ,message
- ,timestamp
   -- * Working with the Queue
  ,filter
  ,union
- ,fold
+ ,accumulate
  ,delay
+ ,delayWith
  ) where
 
+import qualified Data.Foldable         as Foldable
 import           Data.Function
-import qualified Data.List             as List
+import           Data.Sequence         (Seq, (><), (|>))
+import qualified Data.Sequence         as Seq
 import           Data.Time.Clock.POSIX
 import           Prelude               hiding (filter, map)
 
 -- | The Queue holding the events
-newtype PtQueue a = PtQueue [PtEvent a] deriving (Eq,Show)
+newtype PtQueue a = PtQueue (Seq (PtEvent a)) deriving (Eq,Show)
 
 -- | The Event to be propagated
 data PtEvent a = PtEvent POSIXTime a deriving (Eq,Show)
@@ -42,31 +42,45 @@ data PtEvent a = PtEvent POSIXTime a deriving (Eq,Show)
 
 instance Functor PtQueue where
   -- ^ Useful for changing of messages in the queue. Provides fmap
-  fmap f (PtQueue s) = PtQueue (List.map (fmap f) s)
+  fmap f (PtQueue s) = PtQueue (fmap (fmap f) s)
+
+instance Monoid (PtQueue a) where
+  mempty = empty
+  mappend = union
 
 instance Functor PtEvent where
   -- ^ Useful for changing of messages in the queue. Provides fmap
   fmap f (PtEvent t a) = PtEvent t (f a)
+
 
 -- | Empty queue.
 --
 -- > propagate (mkEvent now "New Sample") empty
 --
 empty :: PtQueue a
-empty = PtQueue []
+empty = PtQueue mempty
 
 -- | Place an event onto a queue.
 --
 -- > propagate (mkEvent now "Another Sample") q
 --
 propagate :: () => PtEvent a -> PtQueue a -> PtQueue a
-propagate e (PtQueue s) = PtQueue (_sortEvents (e : s))
+propagate e (PtQueue s) = PtQueue (_sortEvents (s |> e))
 
 fromList :: [PtEvent a] -> PtQueue a
-fromList = PtQueue . _sortEvents
+fromList = PtQueue . _sortEvents . Seq.fromList
 
 toList :: PtQueue a -> [PtEvent a]
-toList (PtQueue s) = s
+toList (PtQueue s) = Foldable.toList s
+
+mkEvent :: POSIXTime -> a -> PtEvent a
+mkEvent t a = PtEvent t a
+
+message :: PtEvent a -> a
+message (PtEvent _ m) = m
+
+_timestamp :: PtEvent a -> POSIXTime
+_timestamp (PtEvent t _) = t
 
 -- | Union of two queues of the same type.
 --
@@ -79,39 +93,34 @@ toList (PtQueue s) = s
 -- latter adds too much strictness
 --
 union :: () => PtQueue a -> PtQueue a -> PtQueue a
-union (PtQueue s1) (PtQueue s2) = PtQueue (_sortEvents (s1 ++ s2))
+union (PtQueue s1) (PtQueue s2) = PtQueue (_sortEvents (s1 >< s2))
 
 leftMerge :: PtQueue a -> PtQueue b -> PtQueue (a,PtQueue b)
-leftMerge (PtQueue xs) ys = PtQueue (List.map (adjustedTo ys) xs)
+leftMerge (PtQueue xs) ys = PtQueue (fmap (adjustedTo ys) xs)
   where
   adjustedTo :: PtQueue z -> PtEvent x -> PtEvent (x,PtQueue z)
   adjustedTo zs (PtEvent t x) = PtEvent t (x, zs `_until` t)
 
 filter :: (a -> Bool) -> PtQueue a -> PtQueue a
-filter = undefined
+filter p (PtQueue s) = PtQueue (Seq.filter (p . message) s)
 
 -- | A simple accumulation. Events emmitted by the queue can be
 -- accumulated to produce a value or to be placed onto a new queue
-fold :: (b -> a -> b) -> b -> PtQueue a -> b
-fold = undefined
+accumulate :: (b -> a -> b) -> b -> PtQueue a -> b
+accumulate f a (PtQueue s) = Foldable.foldl' (\a' e' -> f a' (message e')) a s
 
--- | Delay is a special case of fold which produces a queue with
--- several messages brought together into a list
-delay :: Int -> PtQueue a -> PtQueue [a]
-delay = undefined
+delay :: PtQueue a -> PtQueue (a,a)
+delay (PtQueue s) = PtQueue (Seq.zipWith (_zipEventsWith (,)) s (Seq.drop 1 s))
 
-timestamp :: PtEvent a -> POSIXTime
-timestamp (PtEvent t _) = t
+delayWith :: (a -> a -> b) -> PtQueue a -> PtQueue b
+delayWith f (PtQueue s) = PtQueue (Seq.zipWith (_zipEventsWith f) s (Seq.drop 1 s))
 
-message :: PtEvent a -> a
-message (PtEvent _ m) = m
+_zipEventsWith :: (a -> a -> b) -> PtEvent a -> PtEvent a -> PtEvent b
+_zipEventsWith f (PtEvent _ x) (PtEvent t y) = mkEvent t (f x y)
 
-mkEvent :: POSIXTime -> a -> PtEvent a
-mkEvent t a = PtEvent t a
-
-_sortEvents :: [PtEvent a] -> [PtEvent a]
-_sortEvents = List.sortBy (compare `on` timestamp)
+_sortEvents :: (Seq (PtEvent a)) -> (Seq (PtEvent a))
+_sortEvents = Seq.sortBy (compare `on` _timestamp)
 
 _until :: PtQueue a -> POSIXTime -> PtQueue a
-_until (PtQueue xs) t = PtQueue (List.filter ((t >=) . timestamp) xs)
+_until (PtQueue xs) t = PtQueue (Seq.takeWhileL ((t >=) . _timestamp) (_sortEvents xs))
 
